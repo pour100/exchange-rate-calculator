@@ -41,6 +41,7 @@ const trendCache = new Map(); // key -> { points, startYmd, endYmd, lastDateYmd 
 let inFlightTrendController = null;
 
 let audio = null;
+let bgmAutoplayAttempted = false;
 
 const chartState = {
   points: [],
@@ -393,7 +394,8 @@ function drawLineChart(canvas, points, opts) {
   chartState.bottom = bottom;
 
   if (!points.length) {
-    ctx.fillStyle = "#54605c";
+    const cs = getComputedStyle(document.documentElement);
+    ctx.fillStyle = (cs.getPropertyValue("--chart-label") || "#54605c").trim();
     ctx.font = `${Math.floor(14 * dpr)}px Space Grotesk, sans-serif`;
     ctx.fillText(t("trendNone"), left, top + Math.floor(22 * dpr));
     return;
@@ -421,9 +423,17 @@ function drawLineChart(canvas, points, opts) {
   const xScale = (tMs) => left + ((tMs - x0) / rangeX) * (right - left);
   const yScale = (v) => bottom - ((v - minY) / rangeY) * (bottom - top);
 
+  const cs = getComputedStyle(document.documentElement);
+  const gridColor = (cs.getPropertyValue("--chart-grid") || "rgba(223,231,227,0.95)").trim();
+  const labelColor = (cs.getPropertyValue("--chart-label") || "rgba(84,96,92,0.92)").trim();
+  const lineColor = (cs.getPropertyValue("--chart-line") || "rgba(13,20,18,0.9)").trim();
+  const fillTop = (cs.getPropertyValue("--chart-fill-top") || "rgba(46,67,255,0.22)").trim();
+  const fillBottom = (cs.getPropertyValue("--chart-fill-bottom") || "rgba(0,194,168,0.04)").trim();
+  const redColor = (cs.getPropertyValue("--chart-red") || "rgba(255,58,58,0.92)").trim();
+
   // Vertical grid + X labels (0..range)
   const ticks = buildXTicks(opts.range, x0, x1);
-  ctx.strokeStyle = "rgba(223, 231, 227, 0.95)";
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = Math.max(1, Math.floor(1 * dpr));
   for (const tick of ticks) {
     const x = xScale(tick.x);
@@ -432,7 +442,7 @@ function drawLineChart(canvas, points, opts) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
 
-    ctx.fillStyle = "#54605c";
+    ctx.fillStyle = labelColor;
     ctx.font = `${Math.floor(11 * dpr)}px Space Grotesk, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
@@ -441,8 +451,8 @@ function drawLineChart(canvas, points, opts) {
 
   // Area fill
   const grad = ctx.createLinearGradient(0, top, 0, bottom);
-  grad.addColorStop(0, "rgba(46, 67, 255, 0.18)");
-  grad.addColorStop(1, "rgba(0, 194, 168, 0.02)");
+  grad.addColorStop(0, fillTop);
+  grad.addColorStop(1, fillBottom);
 
   ctx.beginPath();
   ctx.moveTo(xScale(points[0].x), yScale(points[0].y));
@@ -461,7 +471,7 @@ function drawLineChart(canvas, points, opts) {
   for (let i = 1; i < points.length; i++) {
     ctx.lineTo(xScale(points[i].x), yScale(points[i].y));
   }
-  ctx.strokeStyle = "rgba(13, 20, 18, 0.9)";
+  ctx.strokeStyle = lineColor;
   ctx.lineWidth = Math.max(2, Math.floor(2 * dpr));
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
@@ -474,14 +484,14 @@ function drawLineChart(canvas, points, opts) {
   const sx = xScale(sp.x);
   const sy = yScale(sp.y);
 
-  ctx.strokeStyle = "rgba(255, 58, 58, 0.9)";
+  ctx.strokeStyle = redColor;
   ctx.lineWidth = Math.max(2, Math.floor(2 * dpr));
   ctx.beginPath();
   ctx.moveTo(sx, top);
   ctx.lineTo(sx, bottom);
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(255, 58, 58, 0.95)";
+  ctx.fillStyle = redColor;
   ctx.beginPath();
   ctx.arc(sx, sy, Math.max(4, Math.floor(4 * dpr)), 0, Math.PI * 2);
   ctx.fill();
@@ -651,68 +661,41 @@ function applyTheme(next) {
     b.classList.toggle("is-active", active);
     b.setAttribute("aria-selected", active ? "true" : "false");
   }
+
+  // Redraw chart with theme-specific colors.
+  drawLineChart(trendCanvas, chartState.points, { quote: chartState.to || toSelect.value, range: trendRange });
+  if (!trendTooltip.hidden) renderTooltipForSelection();
 }
 
 function toggleMusic() {
   if (!audio) {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    audio = new Audio("./bgm.mp3");
+    audio.loop = true;
+    audio.preload = "auto";
+    audio.volume = 0.12; // appropriate, not loud
+  }
 
-    const master = ctx.createGain();
-    master.gain.value = 0.0;
-    master.connect(ctx.destination);
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.value = 520;
-    filter.Q.value = 0.7;
-    filter.connect(master);
-
-    const padGain = ctx.createGain();
-    padGain.gain.value = 0.04;
-    padGain.connect(filter);
-
-    const osc1 = ctx.createOscillator();
-    osc1.type = "sine";
-    osc1.frequency.value = 110;
-    osc1.connect(padGain);
-
-    const osc2 = ctx.createOscillator();
-    osc2.type = "triangle";
-    osc2.frequency.value = 165;
-    osc2.detune.value = -6;
-    osc2.connect(padGain);
-
-    const lfo = ctx.createOscillator();
-    lfo.type = "sine";
-    lfo.frequency.value = 0.07;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.012;
-    lfo.connect(lfoGain);
-    lfoGain.connect(padGain.gain);
-
-    osc1.start();
-    osc2.start();
-    lfo.start();
-
-    audio = { ctx, master };
-    master.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.8);
-
-    musicButton.classList.add("is-on");
-    musicButton.setAttribute("aria-pressed", "true");
+  const on = musicButton.classList.contains("is-on");
+  if (on) {
+    audio.pause();
+    musicButton.classList.remove("is-on");
+    musicButton.setAttribute("aria-pressed", "false");
     return;
   }
 
-  const { ctx, master } = audio;
-  const on = musicButton.classList.contains("is-on");
-  if (on) {
-    master.gain.linearRampToValueAtTime(0.0, ctx.currentTime + 0.25);
-    musicButton.classList.remove("is-on");
-    musicButton.setAttribute("aria-pressed", "false");
+  // Some browsers require a user gesture; this function is triggered by a button click.
+  audio.currentTime = audio.currentTime || 0;
+  const p = audio.play();
+  if (p && typeof p.then === "function") {
+    p.then(() => {
+      musicButton.classList.add("is-on");
+      musicButton.setAttribute("aria-pressed", "true");
+    }).catch(() => {
+      // Autoplay/permission blocked; keep button off.
+      musicButton.classList.remove("is-on");
+      musicButton.setAttribute("aria-pressed", "false");
+    });
   } else {
-    if (ctx.state === "suspended") void ctx.resume();
-    master.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.25);
     musicButton.classList.add("is-on");
     musicButton.setAttribute("aria-pressed", "true");
   }
@@ -821,6 +804,30 @@ async function init() {
     setStatus("Failed to initialize.");
     setResult("-", "Could not initialize.", true);
     setTrendReadout(t("trendUnavailable"));
+  }
+
+  // Attempt default playback if the browser allows it; otherwise it will be blocked silently.
+  if (!bgmAutoplayAttempted) {
+    bgmAutoplayAttempted = true;
+    try {
+      if (!audio) {
+        audio = new Audio("./bgm.mp3");
+        audio.loop = true;
+        audio.preload = "auto";
+        audio.volume = 0.12;
+      }
+      const p = audio.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => {
+          musicButton.classList.add("is-on");
+          musicButton.setAttribute("aria-pressed", "true");
+        }).catch(() => {
+          // blocked by autoplay policy; user must click BGM
+        });
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
