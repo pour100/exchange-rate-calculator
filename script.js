@@ -27,6 +27,8 @@ const resultMetaEl = document.getElementById("result-meta");
 const musicButton = document.getElementById("music-btn");
 const langButtons = Array.from(document.querySelectorAll(".seg-btn[data-lang]"));
 const themeButtons = Array.from(document.querySelectorAll(".seg-btn[data-theme]"));
+const langSeg = langButtons.length ? langButtons[0].closest(".seg") : null;
+const themeSeg = themeButtons.length ? themeButtons[0].closest(".seg") : null;
 
 const integerFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
 
@@ -680,6 +682,11 @@ function applyLang(next) {
     b.setAttribute("aria-selected", active ? "true" : "false");
   }
 
+  if (langSeg) {
+    langSeg.style.setProperty("--seg-count", "2");
+    langSeg.style.setProperty("--seg-pos", currentLang === "en" ? "1" : "0");
+  }
+
   // Refresh already-fetched UI strings (status/result/trend) to match the new language.
   if (fromSelect.value && toSelect.value) {
     void convertCurrency(false);
@@ -696,6 +703,11 @@ function applyTheme(next) {
     const active = b.getAttribute("data-theme") === currentTheme;
     b.classList.toggle("is-active", active);
     b.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  if (themeSeg) {
+    themeSeg.style.setProperty("--seg-count", "2");
+    themeSeg.style.setProperty("--seg-pos", currentTheme === "dark" ? "1" : "0");
   }
 
   // Redraw chart with theme-specific colors.
