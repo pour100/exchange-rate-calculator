@@ -13,22 +13,20 @@
   <main class="app">
     <section class="card">
       <header class="header">
-        <div class="title-row">
-          <h1 id="app-title">우식의 실시간 환율 변환기</h1>
+        <h1 id="app-title">우식의 실시간 환율 변환기</h1>
 
-          <div class="controls">
-            <div class="seg" role="tablist" aria-label="Language">
-              <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-lang="ko">KR</button>
-              <button class="seg-btn" type="button" role="tab" aria-selected="false" data-lang="en">EN</button>
-            </div>
-
-            <div class="seg" role="tablist" aria-label="Theme">
-              <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-theme="bright">Bright</button>
-              <button class="seg-btn" type="button" role="tab" aria-selected="false" data-theme="dark">Dark</button>
-            </div>
-
-            <button id="music-btn" class="music-btn" type="button" aria-pressed="false">BGM</button>
+        <div class="controls" aria-label="Header controls">
+          <div class="seg" role="tablist" aria-label="Language">
+            <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-lang="ko">KR</button>
+            <button class="seg-btn" type="button" role="tab" aria-selected="false" data-lang="en">EN</button>
           </div>
+
+          <div class="seg" role="tablist" aria-label="Theme">
+            <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-theme="bright">Bright</button>
+            <button class="seg-btn" type="button" role="tab" aria-selected="false" data-theme="dark">Dark</button>
+          </div>
+
+          <button id="music-btn" class="music-btn" type="button" aria-pressed="false">BGM</button>
         </div>
 
         <div class="status">
@@ -37,48 +35,52 @@
         </div>
       </header>
 
-      <form id="converter-form" class="grid">
-        <label class="field">
-          <span id="label-from">From</span>
-          <select id="from-currency" required></select>
-        </label>
+      <div class="split">
+        <section class="pane pane-top" aria-label="Live exchange rate">
+          <form id="converter-form" class="grid">
+            <label class="field">
+              <span id="label-from">From</span>
+              <select id="from-currency" required></select>
+            </label>
 
-        <label class="field">
-          <span id="label-to">To</span>
-          <select id="to-currency" required></select>
-        </label>
+            <label class="field">
+              <span id="label-to">To</span>
+              <select id="to-currency" required></select>
+            </label>
 
-        <button id="refresh-btn" class="refresh-btn" type="button">Refresh Rate</button>
-      </form>
+            <button id="refresh-btn" class="refresh-btn" type="button">Refresh Rate</button>
+          </form>
 
-      <section id="result" class="result" aria-live="polite">
-        <p class="value">-</p>
-        <p class="meta" id="result-meta">Select currencies to see the rate.</p>
-      </section>
+          <section id="result" class="result" aria-live="polite">
+            <p class="value">-</p>
+            <p class="meta" id="result-meta">Select currencies to see the rate.</p>
+          </section>
+        </section>
 
-      <section class="trend" aria-label="Exchange rate trend">
-        <div class="trend-top">
-          <div>
-            <h2 class="trend-title" id="trend-title">Trend</h2>
-            <p id="trend-subtitle" class="trend-subtitle">-</p>
+        <section class="pane pane-bottom trend" aria-label="Exchange rate trend">
+          <div class="trend-top">
+            <div>
+              <h2 class="trend-title" id="trend-title">Trend</h2>
+              <p id="trend-subtitle" class="trend-subtitle">-</p>
+            </div>
+
+            <div class="tabs" role="tablist" aria-label="Trend range">
+              <button class="tab is-active" type="button" role="tab" aria-selected="true" data-range="1m">1M</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-range="6m">6M</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-range="1y">1Y</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-range="5y">5Y</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-range="10y">10Y</button>
+              <button class="tab" type="button" role="tab" aria-selected="false" data-range="all">ALL</button>
+            </div>
           </div>
 
-          <div class="tabs" role="tablist" aria-label="Trend range">
-            <button class="tab is-active" type="button" role="tab" aria-selected="true" data-range="1m">1M</button>
-            <button class="tab" type="button" role="tab" aria-selected="false" data-range="6m">6M</button>
-            <button class="tab" type="button" role="tab" aria-selected="false" data-range="1y">1Y</button>
-            <button class="tab" type="button" role="tab" aria-selected="false" data-range="5y">5Y</button>
-            <button class="tab" type="button" role="tab" aria-selected="false" data-range="10y">10Y</button>
-            <button class="tab" type="button" role="tab" aria-selected="false" data-range="all">ALL</button>
+          <div class="chart-wrap">
+            <canvas id="trend-canvas" width="900" height="320"></canvas>
+            <div id="trend-tooltip" class="trend-tooltip" hidden></div>
           </div>
-        </div>
-
-        <div class="chart-wrap">
-          <canvas id="trend-canvas" width="900" height="320"></canvas>
-          <div id="trend-tooltip" class="trend-tooltip" hidden></div>
-        </div>
-        <p id="trend-readout" class="trend-readout">Tap and drag the red line to inspect rates.</p>
-      </section>
+          <p id="trend-readout" class="trend-readout">Tap and drag the red line to inspect rates.</p>
+        </section>
+      </div>
     </section>
   </main>
 

@@ -94,7 +94,7 @@ const I18N = {
     loadingCurrencies: "Loading currencies…",
     loadingLive: "Loading live rate…",
     liveLoaded: "Live rate loaded.",
-    updated: "Updated",
+    updated: "UPDATE",
     sameCurrency: "Same currency selected.",
     chooseCurrencies: "Choose currencies.",
     calcFailed: "Rate fetch failed. Use Refresh Rate.",
@@ -119,7 +119,7 @@ function clamp(n, lo, hi) {
 }
 
 function formatSeoulDateTime(date) {
-  const fmt = new Intl.DateTimeFormat("ko-KR", {
+  const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: DISPLAY_TZ,
     year: "numeric",
     month: "2-digit",
@@ -127,11 +127,12 @@ function formatSeoulDateTime(date) {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false
+    hour12: true
   });
   const parts = fmt.formatToParts(date);
   const get = (type) => parts.find((p) => p.type === type)?.value || "";
-  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+  const dp = (get("dayPeriod") || "").toUpperCase();
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")} ${dp}`.trim();
 }
 
 function parseUpdateUtc(utcString) {
