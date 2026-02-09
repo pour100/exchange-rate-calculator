@@ -15,9 +15,6 @@
       <header class="header">
         <p class="eyebrow">FX CONVERTER</p>
         <h1>Fast, clean currency math.</h1>
-        <p class="subtitle">
-          Rates: open.er-api.com (frequent updates). Currency names: frankfurter.app.
-        </p>
 
         <div class="status">
           <span class="dot" aria-hidden="true"></span>
@@ -27,16 +24,9 @@
 
       <form id="converter-form" class="grid">
         <label class="field">
-          <span>Amount</span>
-          <input id="amount" type="number" min="0" step="any" value="1" required>
-        </label>
-
-        <label class="field">
           <span>From</span>
           <select id="from-currency" required></select>
         </label>
-
-        <button id="swap-btn" type="button" aria-label="Swap currencies">Swap</button>
 
         <label class="field">
           <span>To</span>
@@ -48,7 +38,7 @@
 
       <section id="result" class="result" aria-live="polite">
         <p class="value">-</p>
-        <p class="meta">Select currencies and convert.</p>
+        <p class="meta">Select currencies to see the rate.</p>
       </section>
 
       <section class="trend" aria-label="Exchange rate trend">
@@ -70,8 +60,9 @@
 
         <div class="chart-wrap">
           <canvas id="trend-canvas" width="900" height="320"></canvas>
-          <div id="trend-hint" class="trend-hint">Loading trend…</div>
+          <div id="trend-tooltip" class="trend-tooltip" hidden></div>
         </div>
+        <p id="trend-readout" class="trend-readout">Tap and drag the red line to inspect rates.</p>
       </section>
     </section>
   </main>
