@@ -10,10 +10,25 @@
   --border: #d9e3df;
   --danger: #8d1f1f;
   --shadow: 0 22px 60px #0d141226;
+  --bg1: #f6f7fb;
+  --bg2: #eef7f3;
+  --bg3: #fdf3ef;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --card: #0b1210;
+  --text: #eef5f2;
+  --muted: #a8b4af;
+  --border: #23302c;
+  --shadow: 0 26px 90px #0000005c;
+  --bg1: #070a0d;
+  --bg2: #08110e;
+  --bg3: #0d0b09;
 }
 
 body {
@@ -25,7 +40,7 @@ body {
     radial-gradient(900px 600px at 12% 18%, #00c2a825 0%, transparent 60%),
     radial-gradient(700px 520px at 86% 22%, #2e43ff24 0%, transparent 55%),
     radial-gradient(650px 520px at 60% 92%, #ff6b3522 0%, transparent 60%),
-    linear-gradient(140deg, #f6f7fb 0%, #eef7f3 55%, #fdf3ef 100%);
+    linear-gradient(140deg, var(--bg1) 0%, var(--bg2) 55%, var(--bg3) 100%);
 }
 
 .app {
@@ -100,9 +115,86 @@ h1 {
   gap: 0.15rem;
 }
 
-.subtitle {
-  margin: 0.4rem 0 1.25rem;
-  color: var(--muted);
+.title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+#app-title {
+  margin: 0.15rem 0 0;
+  font-size: clamp(1.15rem, 3.6vw, 1.6rem);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.seg {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  border: 1px solid #dfe7e3;
+  background: #ffffffb8;
+  backdrop-filter: blur(8px);
+}
+
+html[data-theme="dark"] .seg {
+  border-color: #22302c;
+  background: #0b1210cc;
+}
+
+.seg-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.36rem 0.5rem;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #20302b;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+html[data-theme="dark"] .seg-btn {
+  color: #dfe9e5;
+}
+
+.seg-btn.is-active {
+  background: linear-gradient(90deg, var(--c1), var(--c3), var(--c2));
+  color: #fff;
+}
+
+.music-btn {
+  border: 1px solid #dfe7e3;
+  border-radius: 999px;
+  padding: 0.42rem 0.62rem;
+  background: #ffffffb8;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #20302b;
+}
+
+html[data-theme="dark"] .music-btn {
+  border-color: #22302c;
+  background: #0b1210cc;
+  color: #dfe9e5;
+}
+
+.music-btn.is-on {
+  border-color: transparent;
+  background: linear-gradient(90deg, var(--c1), var(--c3), var(--c2));
+  color: #fff;
 }
 
 .status {
@@ -119,12 +211,18 @@ h1 {
   margin-top: 0.35rem;
 }
 
+html[data-theme="dark"] .status {
+  border-color: #22302c;
+  background: #0b1210cc;
+  color: #dfe9e5;
+}
+
 .dot {
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: conic-gradient(from 180deg, var(--c1), var(--c3), var(--c2), var(--c1));
-  box-shadow: 0 0 0 3px #ffffff;
+  box-shadow: 0 0 0 3px var(--card);
 }
 
 .grid {
@@ -158,7 +256,8 @@ select {
   border-radius: 12px;
   padding: 0.66rem 0.75rem;
   outline: none;
-  background: #fff;
+  background: var(--card);
+  color: var(--text);
 }
 
 input:focus,
@@ -195,6 +294,10 @@ select:focus {
   padding: 1rem;
 }
 
+html[data-theme="dark"] .result {
+  border-color: #22302c;
+  background: linear-gradient(180deg, #0b1210cc, #0b1210);
+}
 .value {
   margin: 0;
   font-size: clamp(1.4rem, 5vw, 2rem);
@@ -277,6 +380,11 @@ select:focus {
   overflow: hidden;
 }
 
+html[data-theme="dark"] .chart-wrap {
+  border-color: #22302c;
+  background: linear-gradient(180deg, #0b1210cc, #0b1210);
+}
+
 #trend-canvas {
   display: block;
   width: 100%;
@@ -307,6 +415,12 @@ select:focus {
   pointer-events: none;
 }
 
+html[data-theme="dark"] .trend-tooltip {
+  border-color: #22302c;
+  background: #0b1210f0;
+  color: #dfe9e5;
+}
+
 @media (max-width: 680px) {
   .grid {
     grid-template-columns: 1fr;
@@ -330,5 +444,22 @@ select:focus {
   .trend {
     margin-top: 1.25rem;
     padding-top: 1.1rem;
+  }
+  .title-row {
+    align-items: center;
+  }
+
+  .controls {
+    gap: 0.35rem;
+  }
+
+  .seg-btn {
+    padding: 0.34rem 0.45rem;
+    font-size: 0.74rem;
+  }
+
+  .music-btn {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.74rem;
   }
 }

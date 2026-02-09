@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,8 +13,23 @@
   <main class="app">
     <section class="card">
       <header class="header">
-        <p class="eyebrow">FX CONVERTER</p>
-        <h1>Fast, clean currency math.</h1>
+        <div class="title-row">
+          <h1 id="app-title">우식의 실시간 환율 변환기</h1>
+
+          <div class="controls">
+            <div class="seg" role="tablist" aria-label="Language">
+              <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-lang="ko">KR</button>
+              <button class="seg-btn" type="button" role="tab" aria-selected="false" data-lang="en">EN</button>
+            </div>
+
+            <div class="seg" role="tablist" aria-label="Theme">
+              <button class="seg-btn is-active" type="button" role="tab" aria-selected="true" data-theme="bright">Bright</button>
+              <button class="seg-btn" type="button" role="tab" aria-selected="false" data-theme="dark">Dark</button>
+            </div>
+
+            <button id="music-btn" class="music-btn" type="button" aria-pressed="false">BGM</button>
+          </div>
+        </div>
 
         <div class="status">
           <span class="dot" aria-hidden="true"></span>
@@ -24,12 +39,12 @@
 
       <form id="converter-form" class="grid">
         <label class="field">
-          <span>From</span>
+          <span id="label-from">From</span>
           <select id="from-currency" required></select>
         </label>
 
         <label class="field">
-          <span>To</span>
+          <span id="label-to">To</span>
           <select id="to-currency" required></select>
         </label>
 
@@ -38,13 +53,13 @@
 
       <section id="result" class="result" aria-live="polite">
         <p class="value">-</p>
-        <p class="meta">Select currencies to see the rate.</p>
+        <p class="meta" id="result-meta">Select currencies to see the rate.</p>
       </section>
 
       <section class="trend" aria-label="Exchange rate trend">
         <div class="trend-top">
           <div>
-            <h2 class="trend-title">Trend</h2>
+            <h2 class="trend-title" id="trend-title">Trend</h2>
             <p id="trend-subtitle" class="trend-subtitle">-</p>
           </div>
 

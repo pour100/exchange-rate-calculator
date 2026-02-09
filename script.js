@@ -1,29 +1,47 @@
-const CURRENCY_NAMES_API_BASE = "https://api.frankfurter.app"; // for currency names
-const LIVE_RATES_API_BASE = "https://open.er-api.com/v6/latest"; // for frequently-updated rates
-const TREND_API_BASE = "https://api.frankfurter.app"; // for historical timeseries (ECB)
+const CURRENCY_NAMES_API_BASE = "https://api.frankfurter.app"; // currency names (Frankfurter)
+const LIVE_RATES_API_BASE = "https://open.er-api.com/v6/latest"; // frequently updated live rates
+const TREND_API_BASE = "https://api.frankfurter.app"; // historical series (Frankfurter / ECB)
+const DISPLAY_TZ = "Asia/Seoul";
 
 const form = document.getElementById("converter-form");
 const fromSelect = document.getElementById("from-currency");
 const toSelect = document.getElementById("to-currency");
 const refreshButton = document.getElementById("refresh-btn");
+
 const resultContainer = document.getElementById("result");
 const resultValue = resultContainer.querySelector(".value");
 const resultMeta = resultContainer.querySelector(".meta");
 const rateStatus = document.getElementById("rate-status");
+
 const trendCanvas = document.getElementById("trend-canvas");
 const trendSubtitle = document.getElementById("trend-subtitle");
 const trendTooltip = document.getElementById("trend-tooltip");
 const trendReadout = document.getElementById("trend-readout");
 const trendTabs = Array.from(document.querySelectorAll(".tab[data-range]"));
 
-const integerFormatter = new Intl.NumberFormat(undefined, {
-  maximumFractionDigits: 0
-});
+const appTitle = document.getElementById("app-title");
+const labelFrom = document.getElementById("label-from");
+const labelTo = document.getElementById("label-to");
+const trendTitle = document.getElementById("trend-title");
+const resultMetaEl = document.getElementById("result-meta");
+const musicButton = document.getElementById("music-btn");
+const langButtons = Array.from(document.querySelectorAll(".seg-btn[data-lang]"));
+const themeButtons = Array.from(document.querySelectorAll(".seg-btn[data-theme]"));
+
+const integerFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+
+let currentLang = "ko";
+let currentTheme = "bright";
+let trendRange = "1m";
+
 const ratesCacheByBase = new Map(); // base -> { rates, lastUpdateUtc }
 let inFlightRatesController = null;
-let trendRange = "1m";
-const trendCache = new Map(); // key -> { points, start, end, lastDate }
+
+const trendCache = new Map(); // key -> { points, startYmd, endYmd, lastDateYmd }
 let inFlightTrendController = null;
+
+let audio = null;
+
 const chartState = {
   points: [],
   from: null,
@@ -31,18 +49,110 @@ const chartState = {
   range: "1m",
   selectedIndex: null,
   tooltipPinned: false,
-  lastReadout: "Tap and drag the red line to inspect rates.",
-  // computed each render
+  lastReadout: "",
+  // derived each draw
+  dpr: 1,
   left: 0,
   top: 0,
   right: 0,
   bottom: 0,
-  dpr: 1,
   x0: 0,
-  x1: 1,
-  minY: 0,
-  maxY: 1
+  x1: 1
 };
+
+const I18N = {
+  ko: {
+    title: "우식의 실시간 환율 변환기",
+    from: "From",
+    to: "To",
+    refresh: "환율 새로고침",
+    resultMeta: "통화를 선택하면 환율이 표시됩니다.",
+    trend: "Trend",
+    trendHelp: "빨간선을 터치하고 드래그하면 해당 시점 환율이 표시됩니다.",
+    loadingCurrencies: "통화 목록 불러오는 중…",
+    loadingLive: "실시간 환율 불러오는 중…",
+    liveLoaded: "실시간 환율 로드 완료",
+    updated: "업데이트",
+    sameCurrency: "같은 통화입니다.",
+    chooseCurrencies: "통화를 선택하세요.",
+    calcFailed: "환율을 가져오지 못했습니다. 새로고침을 눌러주세요.",
+    trendLoading: "트렌드 불러오는 중…",
+    trendNA: "트렌드를 표시할 수 없습니다.",
+    trendUnavailable: "트렌드를 가져오지 못했습니다.",
+    trendNone: "트렌드 데이터가 없습니다.",
+    selected: "선택"
+  },
+  en: {
+    title: "Woosik Live FX Converter",
+    from: "From",
+    to: "To",
+    refresh: "Refresh Rate",
+    resultMeta: "Select currencies to see the rate.",
+    trend: "Trend",
+    trendHelp: "Tap and drag the red line to inspect rates.",
+    loadingCurrencies: "Loading currencies…",
+    loadingLive: "Loading live rate…",
+    liveLoaded: "Live rate loaded.",
+    updated: "Updated",
+    sameCurrency: "Same currency selected.",
+    chooseCurrencies: "Choose currencies.",
+    calcFailed: "Rate fetch failed. Use Refresh Rate.",
+    trendLoading: "Loading trend…",
+    trendNA: "Trend not applicable.",
+    trendUnavailable: "Trend unavailable right now.",
+    trendNone: "No trend data available for this pair.",
+    selected: "Selected"
+  }
+};
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en && I18N.en[key]) || key;
+}
+
+function formatInt(value) {
+  return integerFormatter.format(Math.round(value));
+}
+
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function formatSeoulDateTime(date) {
+  const fmt = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: DISPLAY_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
+}
+
+function parseUpdateUtc(utcString) {
+  const ms = Date.parse(utcString);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms);
+}
+
+function ymdInTimeZone(date, timeZone) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  // en-CA yields YYYY-MM-DD
+  return fmt.format(date);
+}
+
+function getSelectedCodes() {
+  return { from: fromSelect.value, to: toSelect.value };
+}
 
 function setResult(valueText, metaText, isError = false) {
   resultValue.textContent = valueText;
@@ -55,225 +165,203 @@ function setStatus(text) {
 }
 
 function setTrendReadout(text) {
+  chartState.lastReadout = text;
   trendReadout.textContent = text;
-}
-
-function formatInt(value) {
-  return integerFormatter.format(Math.round(value));
-}
-
-function getSelectedCodes() {
-  return {
-    from: fromSelect.value,
-    to: toSelect.value
-  };
-}
-
-function buildCurrencyOption(code, name) {
-  const option = document.createElement("option");
-  option.value = code;
-  option.textContent = `${code} - ${name}`;
-  return option;
 }
 
 async function loadCurrencies() {
   const response = await fetch(`${CURRENCY_NAMES_API_BASE}/currencies`);
-  if (!response.ok) {
-    throw new Error("Failed to load currencies.");
-  }
+  if (!response.ok) throw new Error("Failed to load currencies.");
 
   const currencies = await response.json();
   const entries = Object.entries(currencies).sort(([a], [b]) => a.localeCompare(b));
 
-  const fromFragment = document.createDocumentFragment();
-  const toFragment = document.createDocumentFragment();
-
+  const fromFrag = document.createDocumentFragment();
+  const toFrag = document.createDocumentFragment();
   for (const [code, name] of entries) {
-    fromFragment.appendChild(buildCurrencyOption(code, name));
-    toFragment.appendChild(buildCurrencyOption(code, name));
-  }
+    const opt1 = document.createElement("option");
+    opt1.value = code;
+    opt1.textContent = `${code} - ${name}`;
+    fromFrag.appendChild(opt1);
 
-  fromSelect.appendChild(fromFragment);
-  toSelect.appendChild(toFragment);
+    const opt2 = document.createElement("option");
+    opt2.value = code;
+    opt2.textContent = `${code} - ${name}`;
+    toFrag.appendChild(opt2);
+  }
+  fromSelect.appendChild(fromFrag);
+  toSelect.appendChild(toFrag);
 
   fromSelect.value = "USD";
   toSelect.value = "KRW";
 }
 
-function toYMD(date) {
-  return date.toISOString().slice(0, 10);
+async function fetchLiveRatesForBase(base) {
+  const cached = ratesCacheByBase.get(base);
+  if (cached) return cached;
+
+  if (inFlightRatesController) inFlightRatesController.abort();
+  inFlightRatesController = new AbortController();
+
+  const response = await fetch(`${LIVE_RATES_API_BASE}/${encodeURIComponent(base)}`, {
+    signal: inFlightRatesController.signal
+  });
+  if (!response.ok) throw new Error("Failed to fetch live rates.");
+
+  const payload = await response.json();
+  if (payload.result !== "success" || !payload.rates) throw new Error("Bad live rates response.");
+
+  const entry = { rates: payload.rates, lastUpdateUtc: payload.time_last_update_utc || null };
+  ratesCacheByBase.set(base, entry);
+  return entry;
 }
 
-function computeTrendStart(range, now) {
-  const d = new Date(now.getTime());
-  if (range === "1m") {
-    d.setMonth(d.getMonth() - 1);
-    return d;
+async function ensureRate(base, quote, forceRefresh = false) {
+  if (forceRefresh) ratesCacheByBase.delete(base);
+  const cached = ratesCacheByBase.get(base);
+  if (cached && typeof cached.rates?.[quote] === "number") {
+    return { rate: cached.rates[quote], lastUpdateUtc: cached.lastUpdateUtc };
   }
-  if (range === "6m") {
-    d.setMonth(d.getMonth() - 6);
-    return d;
+  const entry = await fetchLiveRatesForBase(base);
+  const rate = entry.rates?.[quote];
+  if (typeof rate !== "number") throw new Error("Rate missing.");
+  return { rate, lastUpdateUtc: entry.lastUpdateUtc };
+}
+
+async function convertCurrency(forceRefreshRate = false) {
+  const { from, to } = getSelectedCodes();
+
+  if (!from || !to) {
+    setResult("-", t("chooseCurrencies"), true);
+    setStatus(t("chooseCurrencies"));
+    return;
   }
-  if (range === "1y") {
-    d.setFullYear(d.getFullYear() - 1);
-    return d;
+
+  if (from === to) {
+    setResult(`1 ${to}`, `1 ${from} = 1 ${to}`);
+    setStatus(t("sameCurrency"));
+    return;
   }
-  if (range === "5y") {
-    d.setFullYear(d.getFullYear() - 5);
-    return d;
-  }
-  if (range === "10y") {
-    d.setFullYear(d.getFullYear() - 10);
-    return d;
-  }
-  // ECB series commonly starts in 1999; use an early date as "unlimited".
-  return new Date("1999-01-04T00:00:00.000Z");
+
+  setStatus(t("loadingLive"));
+  setResult("…", "…");
+
+  const { rate, lastUpdateUtc } = await ensureRate(from, to, forceRefreshRate);
+  const updated = lastUpdateUtc ? parseUpdateUtc(lastUpdateUtc) : null;
+  const updatedKst = updated ? formatSeoulDateTime(updated) : null;
+
+  setResult(`${formatInt(rate)} ${to}`, `1 ${from} = ${formatInt(rate)} ${to}${updatedKst ? ` | ${t("updated")}: ${updatedKst}` : ""}`);
+  setStatus(updatedKst ? `${t("updated")}: ${updatedKst}` : t("liveLoaded"));
 }
 
 function downsample(points, maxPoints) {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
   const out = [];
-  for (let i = 0; i < points.length; i += step) {
-    out.push(points[i]);
-  }
-  // Ensure last point is present for the "latest" read.
-  if (out[out.length - 1] !== points[points.length - 1]) {
-    out.push(points[points.length - 1]);
-  }
+  for (let i = 0; i < points.length; i += step) out.push(points[i]);
+  if (out[out.length - 1] !== points[points.length - 1]) out.push(points[points.length - 1]);
   return out;
 }
 
-function addDays(d, days) {
-  const x = new Date(d.getTime());
-  x.setDate(x.getDate() + days);
-  return x;
+function computeTrendStartYmd(endYmd, range) {
+  // Treat YYYY-MM-DD as UTC midnight for date arithmetic (we only need the date component).
+  const d = new Date(`${endYmd}T00:00:00.000Z`);
+  if (range === "1m") d.setMonth(d.getMonth() - 1);
+  else if (range === "6m") d.setMonth(d.getMonth() - 6);
+  else if (range === "1y") d.setFullYear(d.getFullYear() - 1);
+  else if (range === "5y") d.setFullYear(d.getFullYear() - 5);
+  else if (range === "10y") d.setFullYear(d.getFullYear() - 10);
+  else return "1999-01-04";
+  return d.toISOString().slice(0, 10);
 }
 
-function addMonths(d, months) {
-  const x = new Date(d.getTime());
-  x.setMonth(x.getMonth() + months);
-  return x;
+async function fetchTrendSeries(base, quote, range) {
+  const now = new Date();
+  const endYmd = ymdInTimeZone(now, DISPLAY_TZ);
+  const startYmd = computeTrendStartYmd(endYmd, range);
+  const key = `${base}:${quote}:${range}:${startYmd}:${endYmd}`;
+
+  const cached = trendCache.get(key);
+  if (cached) return cached;
+
+  if (inFlightTrendController) inFlightTrendController.abort();
+  inFlightTrendController = new AbortController();
+
+  const url =
+    `${TREND_API_BASE}/${encodeURIComponent(startYmd)}..${encodeURIComponent(endYmd)}` +
+    `?from=${encodeURIComponent(base)}&to=${encodeURIComponent(quote)}`;
+
+  const response = await fetch(url, { signal: inFlightTrendController.signal });
+  if (!response.ok) throw new Error("Failed to fetch trend series.");
+
+  const payload = await response.json();
+  const rateByDate = payload.rates || {};
+  const dates = Object.keys(rateByDate).sort();
+
+  const points = [];
+  for (const d of dates) {
+    const v = rateByDate[d]?.[quote];
+    if (typeof v === "number") points.push({ x: Date.parse(d), y: v, date: d });
+  }
+
+  // Ensure series reaches "today" with latest live rate (even if ECB series lags).
+  try {
+    const { rate, lastUpdateUtc } = await ensureRate(base, quote, false);
+    const lastDateYmd = points.length ? points[points.length - 1].date : null;
+    if (lastDateYmd !== endYmd) {
+      points.push({
+        x: Date.parse(endYmd),
+        y: rate,
+        date: endYmd,
+        liveUpdatedUtc: lastUpdateUtc || null
+      });
+    }
+  } catch {
+    // ignore
+  }
+
+  const sampled = downsample(points, 360);
+  const lastDateYmd = points.length ? points[points.length - 1].date : null;
+  const entry = { points: sampled, startYmd, endYmd, lastDateYmd };
+  trendCache.set(key, entry);
+  return entry;
 }
 
-function addYears(d, years) {
-  const x = new Date(d.getTime());
-  x.setFullYear(x.getFullYear() + years);
-  return x;
+function getTickSpec(range, startMs, endMs) {
+  if (range === "1m") return { total: 4, step: 1, suffix: "W" };
+  if (range === "6m") return { total: 6, step: 1, suffix: "M" };
+  if (range === "1y") return { total: 12, step: 1, suffix: "M" };
+  if (range === "5y") return { total: 5, step: 1, suffix: "Y" };
+  if (range === "10y") return { total: 10, step: 1, suffix: "Y" };
+
+  const start = new Date(startMs);
+  const end = new Date(endMs);
+  const totalYears = Math.max(1, end.getUTCFullYear() - start.getUTCFullYear());
+  const step = 5;
+  return { total: totalYears, step, suffix: "Y" };
 }
 
 function buildXTicks(range, startMs, endMs) {
-  const start = new Date(startMs);
-  const end = new Date(endMs);
+  const { total, step, suffix } = getTickSpec(range, startMs, endMs);
   const ticks = [];
-
-  let unit = "month";
-  let step = 1;
-  let suffix = "M";
-
-  if (range === "1m") {
-    unit = "week";
-    step = 1;
-    suffix = "W";
-  } else if (range === "6m") {
-    unit = "month";
-    step = 1;
-    suffix = "M";
-  } else if (range === "1y") {
-    unit = "month";
-    step = 1;
-    suffix = "M";
-  } else if (range === "5y") {
-    unit = "year";
-    step = 1;
-    suffix = "Y";
-  } else if (range === "10y") {
-    unit = "year";
-    step = 1;
-    suffix = "Y";
+  for (let i = 0; i <= total; i += step) {
+    const frac = total === 0 ? 0 : (i / total);
+    const x = startMs + frac * (endMs - startMs);
+    ticks.push({ x, label: `${i}${suffix}` });
+  }
+  // Ensure the end label exists even when total isn't divisible by step
+  if (ticks.length === 0 || ticks[ticks.length - 1].label !== `${total}${suffix}`) {
+    ticks.push({ x: endMs, label: `${total}${suffix}` });
   } else {
-    unit = "year";
-    step = 5;
-    suffix = "Y";
+    ticks[ticks.length - 1].x = endMs;
   }
-
-  let i = 1;
-  let t = start;
-  while (true) {
-    if (unit === "week") t = addDays(start, 7 * step * i);
-    else if (unit === "month") t = addMonths(start, step * i);
-    else t = addYears(start, step * i);
-
-    const ms = t.getTime();
-    if (ms >= end.getTime()) break;
-    ticks.push({ x: ms, label: `${step * i}${suffix}` });
-    i++;
-    if (i > 300) break;
+  // Ensure 0 label exists at start
+  if (ticks[0].label !== `0${suffix}`) {
+    ticks.unshift({ x: startMs, label: `0${suffix}` });
+  } else {
+    ticks[0].x = startMs;
   }
-
   return ticks;
-}
-
-function clamp(n, lo, hi) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function findNearestPointIndex(points, tMs) {
-  // points are sorted by x asc
-  let lo = 0;
-  let hi = points.length - 1;
-  while (lo < hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    if (points[mid].x < tMs) lo = mid + 1;
-    else hi = mid;
-  }
-  const i = lo;
-  if (i <= 0) return 0;
-  if (i >= points.length) return points.length - 1;
-  const a = points[i - 1];
-  const b = points[i];
-  return (tMs - a.x) <= (b.x - tMs) ? (i - 1) : i;
-}
-
-function timeFromCanvasX(xCss) {
-  const leftCss = chartState.left / chartState.dpr;
-  const rightCss = chartState.right / chartState.dpr;
-  const xClamped = clamp(xCss, leftCss, rightCss);
-  const frac = (xClamped - leftCss) / Math.max(1e-6, (rightCss - leftCss));
-  return chartState.x0 + frac * (chartState.x1 - chartState.x0);
-}
-
-function canvasXForTime(tMs) {
-  const frac = (tMs - chartState.x0) / Math.max(1, (chartState.x1 - chartState.x0));
-  const x = chartState.left + frac * (chartState.right - chartState.left);
-  return x / chartState.dpr;
-}
-
-function renderTooltipForSelection() {
-  if (!chartState.points.length || chartState.selectedIndex == null) {
-    trendTooltip.hidden = true;
-    return;
-  }
-  const p = chartState.points[chartState.selectedIndex];
-  const from = chartState.from || fromSelect.value;
-  const to = chartState.to || toSelect.value;
-
-  trendTooltip.innerHTML = `<div><b>${p.date}</b></div><div>1 ${from} = ${formatInt(p.y)} ${to}</div>`;
-  trendTooltip.hidden = false;
-
-  const wrap = trendCanvas.parentElement;
-  if (!wrap) return;
-  const wrapRect = wrap.getBoundingClientRect();
-
-  // position near the red line, but keep it within the chart box
-  const xCss = canvasXForTime(p.x);
-  const tipRect = trendTooltip.getBoundingClientRect();
-  const pad = 10;
-  const left = clamp(xCss - tipRect.width / 2, pad, wrapRect.width - tipRect.width - pad);
-  trendTooltip.style.left = `${left}px`;
-  trendTooltip.style.top = `${pad}px`;
-
-  setTrendReadout(`Selected: ${p.date} | 1 ${from} = ${formatInt(p.y)} ${to}`);
 }
 
 function drawLineChart(canvas, points, opts) {
@@ -284,11 +372,13 @@ function drawLineChart(canvas, points, opts) {
   const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
   const w = Math.max(1, Math.floor(rect.width * dpr));
   const ratio = rect.width < 520 ? 0.78 : 0.52;
-  const h = Math.max(1, Math.floor(Math.max(320, rect.width * ratio) * dpr));
+  const h = Math.max(1, Math.floor(Math.max(340, rect.width * ratio) * dpr));
   canvas.width = w;
   canvas.height = h;
 
   ctx.clearRect(0, 0, w, h);
+
+  chartState.dpr = dpr;
 
   const pad = Math.floor(18 * dpr);
   const labelPad = Math.floor(22 * dpr);
@@ -301,12 +391,11 @@ function drawLineChart(canvas, points, opts) {
   chartState.top = top;
   chartState.right = right;
   chartState.bottom = bottom;
-  chartState.dpr = dpr;
 
   if (!points.length) {
     ctx.fillStyle = "#54605c";
     ctx.font = `${Math.floor(14 * dpr)}px Space Grotesk, sans-serif`;
-    ctx.fillText("No trend data.", left, top + Math.floor(22 * dpr));
+    ctx.fillText(t("trendNone"), left, top + Math.floor(22 * dpr));
     return;
   }
 
@@ -317,28 +406,25 @@ function drawLineChart(canvas, points, opts) {
     maxY = Math.max(maxY, p.y);
   }
   if (minY === maxY) {
-    minY = minY * 0.995;
-    maxY = maxY * 1.005;
+    minY *= 0.995;
+    maxY *= 1.005;
   }
 
-  const rangeY = maxY - minY;
   const x0 = points[0].x;
   const x1 = points[points.length - 1].x;
-  const rangeX = Math.max(1, x1 - x0);
-
-  const xScale = (t) => left + ((t - x0) / rangeX) * (right - left);
-  const yScale = (v) => bottom - ((v - minY) / rangeY) * (bottom - top);
-
   chartState.x0 = x0;
   chartState.x1 = x1;
-  chartState.minY = minY;
-  chartState.maxY = maxY;
 
-  // Vertical grid + x labels (relative time)
+  const rangeX = Math.max(1, x1 - x0);
+  const rangeY = Math.max(1e-9, maxY - minY);
+
+  const xScale = (tMs) => left + ((tMs - x0) / rangeX) * (right - left);
+  const yScale = (v) => bottom - ((v - minY) / rangeY) * (bottom - top);
+
+  // Vertical grid + X labels (0..range)
   const ticks = buildXTicks(opts.range, x0, x1);
-  ctx.strokeStyle = "#dfe7e3";
+  ctx.strokeStyle = "rgba(223, 231, 227, 0.95)";
   ctx.lineWidth = Math.max(1, Math.floor(1 * dpr));
-  ctx.globalAlpha = 0.95;
   for (const tick of ticks) {
     const x = xScale(tick.x);
     ctx.beginPath();
@@ -346,15 +432,12 @@ function drawLineChart(canvas, points, opts) {
     ctx.lineTo(x, bottom);
     ctx.stroke();
 
-    ctx.globalAlpha = 1;
     ctx.fillStyle = "#54605c";
-    ctx.font = `${Math.floor(12 * dpr)}px Space Grotesk, sans-serif`;
+    ctx.font = `${Math.floor(11 * dpr)}px Space Grotesk, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillText(tick.label, x, bottom + Math.floor(6 * dpr));
-    ctx.globalAlpha = 0.95;
   }
-  ctx.globalAlpha = 1;
 
   // Area fill
   const grad = ctx.createLinearGradient(0, top, 0, bottom);
@@ -384,11 +467,12 @@ function drawLineChart(canvas, points, opts) {
   ctx.lineCap = "round";
   ctx.stroke();
 
-  // Selection line (red) + marker
-  const idx = chartState.selectedIndex ?? (points.length - 1);
-  const p = points[Math.min(points.length - 1, Math.max(0, idx))];
-  const sx = xScale(p.x);
-  const sy = yScale(p.y);
+  // Selection (red line + marker)
+  const idx = chartState.selectedIndex == null ? points.length - 1 : clamp(chartState.selectedIndex, 0, points.length - 1);
+  chartState.selectedIndex = idx;
+  const sp = points[idx];
+  const sx = xScale(sp.x);
+  const sy = yScale(sp.y);
 
   ctx.strokeStyle = "rgba(255, 58, 58, 0.9)";
   ctx.lineWidth = Math.max(2, Math.floor(2 * dpr));
@@ -403,309 +487,340 @@ function drawLineChart(canvas, points, opts) {
   ctx.fill();
 }
 
-function selectByCanvasEvent(ev) {
-  if (!chartState.points.length) return;
-  const rect = trendCanvas.getBoundingClientRect();
-  const xCss = ev.clientX - rect.left;
-  const tMs = timeFromCanvasX(xCss);
-  const idx = findNearestPointIndex(chartState.points, tMs);
-  chartState.selectedIndex = idx;
-  drawLineChart(trendCanvas, chartState.points, { quote: chartState.to || toSelect.value, range: trendRange });
-  renderTooltipForSelection();
+function timeFromCanvasX(xCss) {
+  const leftCss = chartState.left / chartState.dpr;
+  const rightCss = chartState.right / chartState.dpr;
+  const xClamped = clamp(xCss, leftCss, rightCss);
+  const frac = (xClamped - leftCss) / Math.max(1e-6, (rightCss - leftCss));
+  return chartState.x0 + frac * (chartState.x1 - chartState.x0);
+}
+
+function canvasXForTime(tMs) {
+  const frac = (tMs - chartState.x0) / Math.max(1, (chartState.x1 - chartState.x0));
+  const x = chartState.left + frac * (chartState.right - chartState.left);
+  return x / chartState.dpr;
+}
+
+function findNearestPointIndex(points, tMs) {
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (points[mid].x < tMs) lo = mid + 1;
+    else hi = mid;
+  }
+  const i = lo;
+  if (i <= 0) return 0;
+  if (i >= points.length) return points.length - 1;
+  const a = points[i - 1];
+  const b = points[i];
+  return (tMs - a.x) <= (b.x - tMs) ? (i - 1) : i;
+}
+
+function renderTooltipForSelection() {
+  if (!chartState.points.length || chartState.selectedIndex == null) {
+    trendTooltip.hidden = true;
+    return;
+  }
+  const p = chartState.points[chartState.selectedIndex];
+  const from = chartState.from || fromSelect.value;
+  const to = chartState.to || toSelect.value;
+
+  let extra = "";
+  if (p.liveUpdatedUtc) {
+    const d = parseUpdateUtc(p.liveUpdatedUtc);
+    if (d) extra = `<div>${t("updated")}: ${formatSeoulDateTime(d)}</div>`;
+  }
+
+  trendTooltip.innerHTML = `<div><b>${p.date}</b></div><div>1 ${from} = ${formatInt(p.y)} ${to}</div>${extra}`;
+  trendTooltip.hidden = false;
+
+  const wrap = trendCanvas.parentElement;
+  if (!wrap) return;
+  const wrapRect = wrap.getBoundingClientRect();
+
+  const xCss = canvasXForTime(p.x);
+  const tipRect = trendTooltip.getBoundingClientRect();
+  const pad = 10;
+  const left = clamp(xCss - tipRect.width / 2, pad, wrapRect.width - tipRect.width - pad);
+  trendTooltip.style.left = `${left}px`;
+  trendTooltip.style.top = `${pad}px`;
+
+  const extraText = p.liveUpdatedUtc ? ` | ${t("updated")}: ${formatSeoulDateTime(parseUpdateUtc(p.liveUpdatedUtc) || new Date())}` : "";
+  trendReadout.textContent = `${t("selected")}: ${p.date} | 1 ${from} = ${formatInt(p.y)} ${to}${extraText}`;
 }
 
 function hideTrendTooltip() {
   chartState.tooltipPinned = false;
   trendTooltip.hidden = true;
-  setTrendReadout(chartState.lastReadout);
+  trendReadout.textContent = chartState.lastReadout || t("trendHelp");
 }
 
-async function fetchTrendSeries(base, quote, range) {
-  const now = new Date();
-  const start = computeTrendStart(range, now);
-  const end = now;
-
-  const startYmd = toYMD(start);
-  const endYmd = toYMD(end);
-  const key = `${base}:${quote}:${range}:${startYmd}:${endYmd}`;
-  const cached = trendCache.get(key);
-  if (cached) return cached;
-
-  if (inFlightTrendController) {
-    inFlightTrendController.abort();
-  }
-  inFlightTrendController = new AbortController();
-
-  const url =
-    `${TREND_API_BASE}/${encodeURIComponent(startYmd)}..${encodeURIComponent(endYmd)}` +
-    `?from=${encodeURIComponent(base)}&to=${encodeURIComponent(quote)}`;
-
-  const response = await fetch(url, { signal: inFlightTrendController.signal });
-  if (!response.ok) {
-    throw new Error("Failed to fetch trend series.");
-  }
-
-  const payload = await response.json();
-  const rateByDate = payload.rates || {};
-  const points = [];
-  const dates = Object.keys(rateByDate).sort();
-  for (const d of dates) {
-    const v = rateByDate[d]?.[quote];
-    if (typeof v === "number") {
-      points.push({ x: Date.parse(d), y: v, date: d });
-    }
-  }
-
-  const sampled = downsample(points, 320);
-  const lastDate = points.length ? points[points.length - 1].date : null;
-  const entry = { points: sampled, start: startYmd, end: endYmd, lastDate };
-  trendCache.set(key, entry);
-  return entry;
+function selectByClientX(clientX) {
+  if (!chartState.points.length) return;
+  const rect = trendCanvas.getBoundingClientRect();
+  const xCss = clientX - rect.left;
+  const tMs = timeFromCanvasX(xCss);
+  chartState.selectedIndex = findNearestPointIndex(chartState.points, tMs);
+  drawLineChart(trendCanvas, chartState.points, { quote: chartState.to || toSelect.value, range: trendRange });
+  renderTooltipForSelection();
 }
 
 async function updateTrend(force = false) {
   const { from, to } = getSelectedCodes();
   if (!from || !to) return;
 
+  chartState.from = from;
+  chartState.to = to;
+  chartState.range = trendRange;
+
   if (from === to) {
-    trendSubtitle.textContent = "Same currency selected.";
-    chartState.lastReadout = "Trend not applicable.";
-    setTrendReadout(chartState.lastReadout);
+    trendSubtitle.textContent = t("sameCurrency");
     chartState.points = [];
-    chartState.from = from;
-    chartState.to = to;
-    chartState.range = trendRange;
     chartState.selectedIndex = null;
-    trendTooltip.hidden = true;
+    hideTrendTooltip();
+    setTrendReadout(t("trendNA"));
     drawLineChart(trendCanvas, [], { quote: to, range: trendRange });
     return;
   }
 
-  setTrendReadout("Loading trend…");
+  hideTrendTooltip();
+  setTrendReadout(t("trendLoading"));
   trendSubtitle.textContent = `1 ${from} in ${to} (${trendRange.toUpperCase()})`;
 
-  try {
-    if (force) {
-      // Clear cache entries for this pair/range quickly by recreating map
-      for (const k of trendCache.keys()) {
-        if (k.startsWith(`${from}:${to}:${trendRange}:`)) {
-          trendCache.delete(k);
-        }
-      }
+  if (force) {
+    for (const k of trendCache.keys()) {
+      if (k.startsWith(`${from}:${to}:${trendRange}:`)) trendCache.delete(k);
     }
+  }
+
+  try {
     const series = await fetchTrendSeries(from, to, trendRange);
     chartState.points = series.points;
-    chartState.from = from;
-    chartState.to = to;
-    chartState.range = trendRange;
-    chartState.selectedIndex = series.points.length ? (series.points.length - 1) : null;
-    chartState.tooltipPinned = false;
-    trendTooltip.hidden = true;
+    chartState.selectedIndex = series.points.length ? series.points.length - 1 : null;
 
     drawLineChart(trendCanvas, series.points, { quote: to, range: trendRange });
+
     const last = series.points.length ? series.points[series.points.length - 1] : null;
-    if (last) {
-      chartState.lastReadout = `Last: ${last.date} | 1 ${from} = ${formatInt(last.y)} ${to}`;
-      setTrendReadout(chartState.lastReadout);
-      trendSubtitle.textContent = `1 ${from} in ${to} (${trendRange.toUpperCase()}) | Last: ${series.lastDate || "-"}`;
-    } else {
-      chartState.lastReadout = "No trend data available for this pair.";
-      setTrendReadout(chartState.lastReadout);
+    if (!last) {
+      setTrendReadout(t("trendNone"));
+      return;
     }
-  } catch (error) {
-    chartState.lastReadout = "Trend unavailable right now.";
-    setTrendReadout(chartState.lastReadout);
+
+    let extra = "";
+    if (last.liveUpdatedUtc) {
+      const d = parseUpdateUtc(last.liveUpdatedUtc);
+      if (d) extra = ` | ${t("updated")}: ${formatSeoulDateTime(d)}`;
+    }
+    setTrendReadout(`Last: ${last.date} | 1 ${from} = ${formatInt(last.y)} ${to}${extra}`);
+  } catch {
+    setTrendReadout(t("trendUnavailable"));
   }
 }
 
-async function fetchLiveRatesForBase(base) {
-  if (!base) {
-    throw new Error("Missing base currency.");
+function applyLang(next) {
+  currentLang = next === "en" ? "en" : "ko";
+  localStorage.setItem("fx_lang", currentLang);
+  document.documentElement.lang = currentLang === "ko" ? "ko" : "en";
+
+  appTitle.textContent = t("title");
+  labelFrom.textContent = t("from");
+  labelTo.textContent = t("to");
+  refreshButton.textContent = t("refresh");
+  trendTitle.textContent = t("trend");
+  resultMetaEl.textContent = t("resultMeta");
+
+  if (!chartState.tooltipPinned) {
+    setTrendReadout(t("trendHelp"));
   }
 
-  const cached = ratesCacheByBase.get(base);
-  if (cached) {
-    return cached;
+  for (const b of langButtons) {
+    const active = b.getAttribute("data-lang") === currentLang;
+    b.classList.toggle("is-active", active);
+    b.setAttribute("aria-selected", active ? "true" : "false");
   }
-
-  if (inFlightRatesController) {
-    inFlightRatesController.abort();
-  }
-  inFlightRatesController = new AbortController();
-
-  const url = `${LIVE_RATES_API_BASE}/${encodeURIComponent(base)}`;
-  const response = await fetch(url, { signal: inFlightRatesController.signal });
-  if (!response.ok) {
-    throw new Error("Failed to fetch live rates.");
-  }
-
-  const payload = await response.json();
-  if (payload.result !== "success" || !payload.rates) {
-    throw new Error("Live rates API returned an unexpected response.");
-  }
-
-  const entry = {
-    rates: payload.rates,
-    lastUpdateUtc: payload.time_last_update_utc || null
-  };
-  ratesCacheByBase.set(base, entry);
-  return entry;
 }
 
-function getCachedRate(base, quote) {
-  const cached = ratesCacheByBase.get(base);
-  if (!cached) return null;
-  const rate = cached.rates?.[quote];
-  if (typeof rate !== "number") return null;
-  return { rate, lastUpdateUtc: cached.lastUpdateUtc };
+function applyTheme(next) {
+  currentTheme = next === "dark" ? "dark" : "bright";
+  localStorage.setItem("fx_theme", currentTheme);
+  document.documentElement.setAttribute("data-theme", currentTheme);
+
+  for (const b of themeButtons) {
+    const active = b.getAttribute("data-theme") === currentTheme;
+    b.classList.toggle("is-active", active);
+    b.setAttribute("aria-selected", active ? "true" : "false");
+  }
 }
 
-async function ensureRate(base, quote, forceRefresh = false) {
-  if (forceRefresh) {
-    ratesCacheByBase.delete(base);
-  }
-  const cached = getCachedRate(base, quote);
-  if (cached) return cached;
+function toggleMusic() {
+  if (!audio) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
 
-  const entry = await fetchLiveRatesForBase(base);
-  const rate = entry.rates?.[quote];
-  if (typeof rate !== "number") {
-    throw new Error(`Rate not available for ${base} -> ${quote}.`);
-  }
-  return { rate, lastUpdateUtc: entry.lastUpdateUtc };
-}
+    const master = ctx.createGain();
+    master.gain.value = 0.0;
+    master.connect(ctx.destination);
 
-async function convertCurrency(forceRefreshRate = false) {
-  const { from, to } = getSelectedCodes();
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 520;
+    filter.Q.value = 0.7;
+    filter.connect(master);
 
-  if (!from || !to) {
-    setResult("-", "Choose both source and target currencies.", true);
-    setStatus("Choose currencies.");
+    const padGain = ctx.createGain();
+    padGain.gain.value = 0.04;
+    padGain.connect(filter);
+
+    const osc1 = ctx.createOscillator();
+    osc1.type = "sine";
+    osc1.frequency.value = 110;
+    osc1.connect(padGain);
+
+    const osc2 = ctx.createOscillator();
+    osc2.type = "triangle";
+    osc2.frequency.value = 165;
+    osc2.detune.value = -6;
+    osc2.connect(padGain);
+
+    const lfo = ctx.createOscillator();
+    lfo.type = "sine";
+    lfo.frequency.value = 0.07;
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.012;
+    lfo.connect(lfoGain);
+    lfoGain.connect(padGain.gain);
+
+    osc1.start();
+    osc2.start();
+    lfo.start();
+
+    audio = { ctx, master };
+    master.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.8);
+
+    musicButton.classList.add("is-on");
+    musicButton.setAttribute("aria-pressed", "true");
     return;
   }
 
-  if (from === to) {
-    setResult(
-      `1 ${to}`,
-      `1 ${from} = 1 ${to}`
-    );
-    setStatus("Same currency selected.");
-    return;
-  }
-
-  if (forceRefreshRate) {
-    setStatus("Refreshing live rate…");
+  const { ctx, master } = audio;
+  const on = musicButton.classList.contains("is-on");
+  if (on) {
+    master.gain.linearRampToValueAtTime(0.0, ctx.currentTime + 0.25);
+    musicButton.classList.remove("is-on");
+    musicButton.setAttribute("aria-pressed", "false");
   } else {
-    setStatus("Using latest cached rate…");
+    if (ctx.state === "suspended") void ctx.resume();
+    master.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.25);
+    musicButton.classList.add("is-on");
+    musicButton.setAttribute("aria-pressed", "true");
   }
-  setResult("...", "Calculating…");
-
-  const { rate, lastUpdateUtc } = await ensureRate(from, to, forceRefreshRate);
-  const converted = 1 * rate;
-
-  setResult(
-    `${formatInt(converted)} ${to}`,
-    `1 ${from} = ${formatInt(rate)} ${to}${lastUpdateUtc ? ` | Updated: ${lastUpdateUtc}` : ""}`
-  );
-  setStatus(lastUpdateUtc ? `Live rate updated: ${lastUpdateUtc}` : "Live rate loaded.");
 }
 
-form.addEventListener("submit", (event) => {
-  // Form submit isn't used (no "Convert" button). Keep this to prevent accidental submits.
-  event.preventDefault();
-});
+function wireEvents() {
+  form.addEventListener("submit", (ev) => ev.preventDefault());
 
-refreshButton.addEventListener("click", () => {
-  void safeConvert(true);
-  void updateTrend(true);
-});
+  refreshButton.addEventListener("click", () => {
+    void convertCurrency(true);
+    void updateTrend(true);
+  });
 
-fromSelect.addEventListener("change", () => {
-  hideTrendTooltip();
-  void safeConvert(false);
-  void updateTrend(false);
-});
-toSelect.addEventListener("change", () => {
-  hideTrendTooltip();
-  void safeConvert(false);
-  void updateTrend(false);
-});
+  fromSelect.addEventListener("change", () => {
+    hideTrendTooltip();
+    void convertCurrency(false);
+    void updateTrend(false);
+  });
 
-async function safeConvert(forceRefreshRate) {
-  try {
-    await convertCurrency(forceRefreshRate);
-  } catch (error) {
-    setResult("-", "Could not convert right now. Try again.", true);
-    setStatus("Rate fetch failed. Try Refresh Rate.");
+  toSelect.addEventListener("change", () => {
+    hideTrendTooltip();
+    void convertCurrency(false);
+    void updateTrend(false);
+  });
+
+  for (const b of langButtons) {
+    b.addEventListener("click", () => applyLang(b.getAttribute("data-lang")));
   }
+  for (const b of themeButtons) {
+    b.addEventListener("click", () => applyTheme(b.getAttribute("data-theme")));
+  }
+  musicButton.addEventListener("click", () => toggleMusic());
+
+  trendTabs.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-range");
+      if (!next || next === trendRange) return;
+      trendRange = next;
+      for (const tbtn of trendTabs) {
+        const active = tbtn === btn;
+        tbtn.classList.toggle("is-active", active);
+        tbtn.setAttribute("aria-selected", active ? "true" : "false");
+      }
+      hideTrendTooltip();
+      void updateTrend(false);
+    });
+  });
+
+  window.addEventListener("resize", () => {
+    drawLineChart(trendCanvas, chartState.points, { quote: chartState.to || toSelect.value, range: trendRange });
+    if (!trendTooltip.hidden) renderTooltipForSelection();
+  });
+
+  trendCanvas.addEventListener("pointerdown", (ev) => {
+    if (!chartState.points.length) return;
+    ev.preventDefault();
+    chartState.tooltipPinned = true;
+    try {
+      trendCanvas.setPointerCapture(ev.pointerId);
+    } catch {
+      // ignore
+    }
+    selectByClientX(ev.clientX);
+  });
+
+  trendCanvas.addEventListener("pointermove", (ev) => {
+    if (!chartState.tooltipPinned) return;
+    if (!chartState.points.length) return;
+    selectByClientX(ev.clientX);
+  });
+
+  trendCanvas.addEventListener("pointerup", (ev) => {
+    try {
+      trendCanvas.releasePointerCapture(ev.pointerId);
+    } catch {
+      // ignore
+    }
+  });
+
+  document.addEventListener("pointerdown", (ev) => {
+    if (!chartState.tooltipPinned) return;
+    const wrap = trendCanvas.parentElement;
+    if (wrap && wrap.contains(ev.target)) return;
+    hideTrendTooltip();
+  });
 }
 
 async function init() {
+  // Theme/lang init first so all default strings show correctly.
+  const savedLang = localStorage.getItem("fx_lang");
+  const savedTheme = localStorage.getItem("fx_theme");
+  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme(savedTheme || (prefersDark ? "dark" : "bright"));
+  applyLang(savedLang || "ko");
+
+  wireEvents();
+  setTrendReadout(t("trendHelp"));
+
   try {
-    setStatus("Loading currencies…");
+    setStatus(t("loadingCurrencies"));
     await loadCurrencies();
-    setStatus("Loading live rate…");
-    await safeConvert(true);
-    trendTabs.forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const next = btn.getAttribute("data-range");
-        if (!next || next === trendRange) return;
-        trendRange = next;
-        for (const t of trendTabs) {
-          const active = t === btn;
-          t.classList.toggle("is-active", active);
-          t.setAttribute("aria-selected", active ? "true" : "false");
-        }
-        hideTrendTooltip();
-        void updateTrend(false);
-      });
-    });
-    window.addEventListener("resize", () => {
-      // Re-render only; avoid refetch on resize.
-      drawLineChart(trendCanvas, chartState.points, { quote: chartState.to || toSelect.value, range: trendRange });
-      if (!trendTooltip.hidden) {
-        renderTooltipForSelection();
-      }
-    });
-
-    trendCanvas.addEventListener("pointerdown", (ev) => {
-      if (!chartState.points.length) return;
-      ev.preventDefault();
-      chartState.tooltipPinned = true;
-      try {
-        trendCanvas.setPointerCapture(ev.pointerId);
-      } catch {
-        // ignore
-      }
-      selectByCanvasEvent(ev);
-    });
-
-    trendCanvas.addEventListener("pointermove", (ev) => {
-      if (!chartState.tooltipPinned) return;
-      if (!chartState.points.length) return;
-      // While dragging (or after tap), keep updating selection as the pointer moves.
-      selectByCanvasEvent(ev);
-    });
-
-    trendCanvas.addEventListener("pointerup", (ev) => {
-      try {
-        trendCanvas.releasePointerCapture(ev.pointerId);
-      } catch {
-        // ignore
-      }
-    });
-
-    document.addEventListener("pointerdown", (ev) => {
-      if (!chartState.tooltipPinned) return;
-      const wrap = trendCanvas.parentElement;
-      if (wrap && wrap.contains(ev.target)) return;
-      hideTrendTooltip();
-    });
-
+    setStatus(t("loadingLive"));
+    await convertCurrency(true);
     await updateTrend(false);
-  } catch (error) {
-    setResult("-", "Could not load currency list. Refresh and retry.", true);
+  } catch (err) {
     setStatus("Failed to initialize.");
+    setResult("-", "Could not initialize.", true);
+    setTrendReadout(t("trendUnavailable"));
   }
 }
 
