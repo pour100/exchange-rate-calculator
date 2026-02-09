@@ -50,6 +50,29 @@
         <p class="value">-</p>
         <p class="meta">Select currencies and convert.</p>
       </section>
+
+      <section class="trend" aria-label="Exchange rate trend">
+        <div class="trend-top">
+          <div>
+            <h2 class="trend-title">Trend</h2>
+            <p id="trend-subtitle" class="trend-subtitle">-</p>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Trend range">
+            <button class="tab is-active" type="button" role="tab" aria-selected="true" data-range="1m">1M</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-range="6m">6M</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-range="1y">1Y</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-range="5y">5Y</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-range="10y">10Y</button>
+            <button class="tab" type="button" role="tab" aria-selected="false" data-range="all">ALL</button>
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <canvas id="trend-canvas" width="900" height="320"></canvas>
+          <div id="trend-hint" class="trend-hint">Loading trend…</div>
+        </div>
+      </section>
     </section>
   </main>
 

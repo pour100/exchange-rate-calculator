@@ -94,6 +94,11 @@ h1 {
   font-size: clamp(1.5rem, 3.5vw, 2rem);
 }
 
+.header {
+  display: grid;
+  gap: 0.15rem;
+}
+
 .subtitle {
   margin: 0.4rem 0 1.25rem;
   color: var(--muted);
@@ -222,6 +227,91 @@ select:focus {
   color: var(--danger);
 }
 
+.trend {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #dfe7e3;
+}
+
+.trend-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.trend-title {
+  margin: 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+}
+
+.trend-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid #dfe7e3;
+  background: #ffffffb8;
+  backdrop-filter: blur(8px);
+}
+
+.tab {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.42rem 0.6rem;
+  background: transparent;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #20302b;
+  transition: background 120ms ease, color 120ms ease, transform 120ms ease;
+}
+
+.tab:hover {
+  transform: translateY(-1px);
+}
+
+.tab.is-active {
+  background: linear-gradient(90deg, var(--c1), var(--c3), var(--c2));
+  color: #fff;
+}
+
+.chart-wrap {
+  position: relative;
+  margin-top: 0.75rem;
+  border-radius: 16px;
+  border: 1px solid #dfe7e3;
+  background: linear-gradient(180deg, #ffffffc7, #ffffff);
+  overflow: hidden;
+}
+
+#trend-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.trend-hint {
+  position: absolute;
+  left: 0.9rem;
+  bottom: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid #dfe7e3;
+  background: #ffffffd0;
+  backdrop-filter: blur(8px);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 680px) {
   .grid {
     grid-template-columns: 1fr;
@@ -229,5 +319,16 @@ select:focus {
 
   #swap-btn {
     justify-self: start;
+  }
+
+  .tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 0.42rem 0;
   }
 }
