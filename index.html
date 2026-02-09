@@ -13,7 +13,7 @@
   <main class="app">
     <section class="card">
       <header class="header">
-        <h1 id="app-title">우식의 실시간 환율 변환기</h1>
+        <h1 id="app-title" data-title="우식의 실시간 환율 변환기">우식의 실시간 환율 변환기</h1>
 
         <div class="controls" aria-label="Header controls">
           <div class="seg" role="tablist" aria-label="Language">
@@ -47,14 +47,16 @@
               <span id="label-to">To</span>
               <select id="to-currency" required></select>
             </label>
-
-            <button id="refresh-btn" class="refresh-btn" type="button">Refresh Rate</button>
           </form>
 
-          <section id="result" class="result" aria-live="polite">
-            <p class="value">-</p>
-            <p class="meta" id="result-meta">Select currencies to see the rate.</p>
-          </section>
+          <div class="rate-row" aria-label="Rate and refresh">
+            <section id="result" class="result result-hero" aria-live="polite">
+              <p class="value">-</p>
+              <p class="meta" id="result-meta">Select currencies to see the rate.</p>
+            </section>
+
+            <button id="refresh-btn" class="refresh-btn refresh-side" type="button">Refresh Rate</button>
+          </div>
         </section>
 
         <section class="pane pane-bottom trend" aria-label="Exchange rate trend">

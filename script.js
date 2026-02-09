@@ -343,8 +343,12 @@ function getTickSpec(range, startMs, endMs) {
   return { total: totalYears, step, suffix: "Y" };
 }
 
-function buildXTicks(range, startMs, endMs) {
-  const { total, step, suffix } = getTickSpec(range, startMs, endMs);
+function buildXTicks(range, startMs, endMs, widthPx) {
+  const { total, suffix } = getTickSpec(range, startMs, endMs);
+  const w = typeof widthPx === "number" && Number.isFinite(widthPx) ? widthPx : 480;
+  // Keep labels from colliding on small screens.
+  const maxLabels = clamp(Math.floor(w / 64), 3, 9);
+  const step = Math.max(1, Math.ceil(total / (maxLabels - 1)));
   const ticks = [];
   for (let i = 0; i <= total; i += step) {
     const frac = total === 0 ? 0 : (i / total);
@@ -371,19 +375,20 @@ function drawLineChart(canvas, points, opts) {
   if (!ctx) return;
 
   const rect = canvas.getBoundingClientRect();
-  const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
-  const w = Math.max(1, Math.floor(rect.width * dpr));
-  const ratio = rect.width < 520 ? 0.78 : 0.52;
-  const h = Math.max(1, Math.floor(Math.max(340, rect.width * ratio) * dpr));
-  canvas.width = w;
-  canvas.height = h;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const w = Math.max(1, rect.width);
+  const h = Math.max(1, rect.height);
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
 
+  // Draw in CSS pixels to keep stroke widths consistent across DPRs.
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  chartState.dpr = dpr;
+  chartState.dpr = 1;
 
-  const pad = Math.floor(18 * dpr);
-  const labelPad = Math.floor(22 * dpr);
+  const pad = 14;
+  const labelPad = 20;
   const left = pad;
   const top = pad;
   const right = w - pad;
@@ -394,11 +399,18 @@ function drawLineChart(canvas, points, opts) {
   chartState.right = right;
   chartState.bottom = bottom;
 
+  const cs = getComputedStyle(document.documentElement);
+  const gridColor = (cs.getPropertyValue("--chart-grid") || "rgba(223,231,227,0.95)").trim();
+  const labelColor = (cs.getPropertyValue("--chart-label") || "rgba(84,96,92,0.92)").trim();
+  const lineColor = (cs.getPropertyValue("--chart-line") || "rgba(13,20,18,0.9)").trim();
+  const fillTop = (cs.getPropertyValue("--chart-fill-top") || "rgba(46,67,255,0.22)").trim();
+  const fillBottom = (cs.getPropertyValue("--chart-fill-bottom") || "rgba(0,194,168,0.04)").trim();
+  const redColor = (cs.getPropertyValue("--chart-red") || "rgba(255,58,58,0.92)").trim();
+
   if (!points.length) {
-    const cs = getComputedStyle(document.documentElement);
-    ctx.fillStyle = (cs.getPropertyValue("--chart-label") || "#54605c").trim();
-    ctx.font = `${Math.floor(14 * dpr)}px Space Grotesk, sans-serif`;
-    ctx.fillText(t("trendNone"), left, top + Math.floor(22 * dpr));
+    ctx.fillStyle = labelColor || "#54605c";
+    ctx.font = "14px Space Grotesk, sans-serif";
+    ctx.fillText(t("trendNone"), left, top + 22);
     return;
   }
 
@@ -424,31 +436,46 @@ function drawLineChart(canvas, points, opts) {
   const xScale = (tMs) => left + ((tMs - x0) / rangeX) * (right - left);
   const yScale = (v) => bottom - ((v - minY) / rangeY) * (bottom - top);
 
-  const cs = getComputedStyle(document.documentElement);
-  const gridColor = (cs.getPropertyValue("--chart-grid") || "rgba(223,231,227,0.95)").trim();
-  const labelColor = (cs.getPropertyValue("--chart-label") || "rgba(84,96,92,0.92)").trim();
-  const lineColor = (cs.getPropertyValue("--chart-line") || "rgba(13,20,18,0.9)").trim();
-  const fillTop = (cs.getPropertyValue("--chart-fill-top") || "rgba(46,67,255,0.22)").trim();
-  const fillBottom = (cs.getPropertyValue("--chart-fill-bottom") || "rgba(0,194,168,0.04)").trim();
-  const redColor = (cs.getPropertyValue("--chart-red") || "rgba(255,58,58,0.92)").trim();
+  const scaled = points.map((p) => ({ x: xScale(p.x), y: yScale(p.y) }));
 
-  // Vertical grid + X labels (0..range)
-  const ticks = buildXTicks(opts.range, x0, x1);
+  function smoothPathTo(ctx2, pts) {
+    if (pts.length < 2) return;
+    ctx2.moveTo(pts[0].x, pts[0].y);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      ctx2.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+    }
+  }
+
+  // Vertical grid + X labels (0..range), adaptive to width
+  const ticks = buildXTicks(opts.range, x0, x1, right - left);
   ctx.strokeStyle = gridColor;
-  ctx.lineWidth = Math.max(1, Math.floor(1 * dpr));
+  ctx.lineWidth = 1;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = labelColor;
+  ctx.font = (w < 360 ? "10px Space Grotesk, sans-serif" : "11px Space Grotesk, sans-serif");
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 6;
   for (const tick of ticks) {
-    const x = xScale(tick.x);
+    const x = Math.round(xScale(tick.x)) + 0.5;
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
-
-    ctx.fillStyle = labelColor;
-    ctx.font = `${Math.floor(11 * dpr)}px Space Grotesk, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillText(tick.label, x, bottom + Math.floor(6 * dpr));
+    ctx.fillText(tick.label, x, bottom + 6);
   }
+  ctx.restore();
 
   // Area fill
   const grad = ctx.createLinearGradient(0, top, 0, bottom);
@@ -456,24 +483,18 @@ function drawLineChart(canvas, points, opts) {
   grad.addColorStop(1, fillBottom);
 
   ctx.beginPath();
-  ctx.moveTo(xScale(points[0].x), yScale(points[0].y));
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(xScale(points[i].x), yScale(points[i].y));
-  }
-  ctx.lineTo(xScale(points[points.length - 1].x), bottom);
-  ctx.lineTo(xScale(points[0].x), bottom);
+  smoothPathTo(ctx, scaled);
+  ctx.lineTo(scaled[scaled.length - 1].x, bottom);
+  ctx.lineTo(scaled[0].x, bottom);
   ctx.closePath();
   ctx.fillStyle = grad;
   ctx.fill();
 
   // Line
   ctx.beginPath();
-  ctx.moveTo(xScale(points[0].x), yScale(points[0].y));
-  for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(xScale(points[i].x), yScale(points[i].y));
-  }
+  smoothPathTo(ctx, scaled);
   ctx.strokeStyle = lineColor;
-  ctx.lineWidth = Math.max(2, Math.floor(2 * dpr));
+  ctx.lineWidth = 2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.stroke();
@@ -481,26 +502,25 @@ function drawLineChart(canvas, points, opts) {
   // Selection (red line + marker)
   const idx = chartState.selectedIndex == null ? points.length - 1 : clamp(chartState.selectedIndex, 0, points.length - 1);
   chartState.selectedIndex = idx;
-  const sp = points[idx];
-  const sx = xScale(sp.x);
-  const sy = yScale(sp.y);
+  const sx = scaled[idx].x;
+  const sy = scaled[idx].y;
 
   ctx.strokeStyle = redColor;
-  ctx.lineWidth = Math.max(2, Math.floor(2 * dpr));
+  ctx.lineWidth = 1.6;
   ctx.beginPath();
-  ctx.moveTo(sx, top);
-  ctx.lineTo(sx, bottom);
+  ctx.moveTo(Math.round(sx) + 0.5, top);
+  ctx.lineTo(Math.round(sx) + 0.5, bottom);
   ctx.stroke();
 
   ctx.fillStyle = redColor;
   ctx.beginPath();
-  ctx.arc(sx, sy, Math.max(4, Math.floor(4 * dpr)), 0, Math.PI * 2);
+  ctx.arc(sx, sy, 3.5, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function timeFromCanvasX(xCss) {
-  const leftCss = chartState.left / chartState.dpr;
-  const rightCss = chartState.right / chartState.dpr;
+  const leftCss = chartState.left;
+  const rightCss = chartState.right;
   const xClamped = clamp(xCss, leftCss, rightCss);
   const frac = (xClamped - leftCss) / Math.max(1e-6, (rightCss - leftCss));
   return chartState.x0 + frac * (chartState.x1 - chartState.x0);
@@ -509,7 +529,7 @@ function timeFromCanvasX(xCss) {
 function canvasXForTime(tMs) {
   const frac = (tMs - chartState.x0) / Math.max(1, (chartState.x1 - chartState.x0));
   const x = chartState.left + frac * (chartState.right - chartState.left);
-  return x / chartState.dpr;
+  return x;
 }
 
 function findNearestPointIndex(points, tMs) {
@@ -635,6 +655,7 @@ function applyLang(next) {
   document.documentElement.lang = currentLang === "ko" ? "ko" : "en";
 
   appTitle.textContent = t("title");
+  appTitle.dataset.title = t("title");
   labelFrom.textContent = t("from");
   labelTo.textContent = t("to");
   refreshButton.textContent = t("refresh");
@@ -649,6 +670,12 @@ function applyLang(next) {
     const active = b.getAttribute("data-lang") === currentLang;
     b.classList.toggle("is-active", active);
     b.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  // Refresh already-fetched UI strings (status/result/trend) to match the new language.
+  if (fromSelect.value && toSelect.value) {
+    void convertCurrency(false);
+    void updateTrend(false);
   }
 }
 

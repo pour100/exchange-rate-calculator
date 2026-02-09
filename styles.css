@@ -132,15 +132,49 @@ h1 {
 }
 
 #app-title {
+  position: relative;
+  display: block;
   margin: 0;
   font-size: clamp(1.35rem, 4.1vw, 2.05rem);
   letter-spacing: -0.03em;
   line-height: 1.1;
   padding: 0.15rem 0 0.1rem;
   background: linear-gradient(90deg, var(--c3), var(--c1), var(--c2));
+  background-size: 220% 220%;
+  animation: titleFlow 7s ease-in-out infinite alternate;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Ink-in-water-ish diffusion (pseudo duplicate with blur + moving gradient) */
+#app-title::before {
+  content: attr(data-title);
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% 40%, var(--c3), transparent 55%),
+    radial-gradient(circle at 60% 10%, var(--c1), transparent 55%),
+    radial-gradient(circle at 85% 60%, var(--c2), transparent 55%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: blur(14px) saturate(1.55);
+  opacity: 0.85;
+  transform: translateY(0);
+  animation: inkSwirl 6.8s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes titleFlow {
+  0% { background-position: 0% 40%; }
+  100% { background-position: 100% 60%; }
+}
+
+@keyframes inkSwirl {
+  0% { background-position: 20% 30%; transform: translateY(0px); }
+  50% { background-position: 60% 55%; transform: translateY(1px); }
+  100% { background-position: 85% 35%; transform: translateY(-1px); }
 }
 
 .controls {
@@ -246,6 +280,14 @@ html[data-theme="dark"] .status {
   margin-top: 1rem;
 }
 
+.rate-row {
+  margin-top: 0.9rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+  align-items: stretch;
+}
+
 .field {
   display: grid;
   gap: 0.3rem;
@@ -282,7 +324,6 @@ select:focus {
 }
 
 .refresh-btn {
-  grid-column: 1 / -1;
   border: 0;
   border-radius: 12px;
   padding: 0.75rem 0.9rem;
@@ -294,17 +335,33 @@ select:focus {
   letter-spacing: 0.02em;
 }
 
+.refresh-btn.refresh-side {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+}
+
 .refresh-btn:hover {
   filter: brightness(1.03);
 }
 
 .result {
-  margin-top: 1rem;
   border-radius: 14px;
   border: 1px solid #dfe7e3;
   background: linear-gradient(180deg, #ffffffc9, #ffffff);
   backdrop-filter: blur(8px);
   padding: 1rem;
+}
+
+.result-hero .value {
+  font-size: clamp(1.6rem, 6vw, 2.4rem);
+  letter-spacing: -0.02em;
+}
+
+.result-hero .meta {
+  font-size: 0.95rem;
+  line-height: 1.25;
 }
 
 html[data-theme="dark"] .result {
@@ -351,6 +408,10 @@ html[data-theme="dark"] .result {
   margin: 0.25rem 0 0;
   color: var(--muted);
   font-size: 0.92rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .tabs {
@@ -411,6 +472,10 @@ html[data-theme="dark"] .chart-wrap {
   margin: 0.6rem 0 0;
   color: var(--muted);
   font-size: 0.92rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .trend-tooltip {
@@ -502,9 +567,30 @@ html[data-theme="dark"] .trend-tooltip {
     gap: 0.65rem;
   }
 
+  .rate-row {
+    margin-top: 0.65rem;
+    gap: 0.65rem;
+  }
+
   .result {
-    margin-top: 0;
-    padding: 0.8rem;
+    padding: 0.85rem;
+  }
+
+  .refresh-btn.refresh-side {
+    font-size: 0.98rem;
+    padding: 0.75rem 0.7rem;
+  }
+
+  .result-hero .value {
+    font-size: clamp(1.75rem, 7.5vw, 2.25rem);
+  }
+
+  .trend-top {
+    gap: 0.6rem;
+  }
+
+  .trend-subtitle {
+    font-size: 0.86rem;
   }
 
   .chart-wrap {
