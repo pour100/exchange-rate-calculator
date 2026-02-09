@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Exchange Rate Calculator</title>
+  <title>FX Converter</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
@@ -12,9 +12,18 @@
 <body>
   <main class="app">
     <section class="card">
-      <p class="eyebrow">Live FX</p>
-      <h1>Exchange Rate Calculator</h1>
-      <p class="subtitle">Powered by frankfurter.app (ECB data)</p>
+      <header class="header">
+        <p class="eyebrow">FX CONVERTER</p>
+        <h1>Fast, clean currency math.</h1>
+        <p class="subtitle">
+          Rates: open.er-api.com (frequent updates). Currency names: frankfurter.app.
+        </p>
+
+        <div class="status">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="rate-status">Loading rates…</span>
+        </div>
+      </header>
 
       <form id="converter-form" class="grid">
         <label class="field">
@@ -34,7 +43,7 @@
           <select id="to-currency" required></select>
         </label>
 
-        <button class="convert-btn" type="submit">Convert</button>
+        <button id="refresh-btn" class="refresh-btn" type="button">Refresh Rate</button>
       </form>
 
       <section id="result" class="result" aria-live="polite">

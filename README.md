@@ -44,7 +44,11 @@ vercel
 vercel --prod
 ```
 
+## Data Sources
+
+- Live rates: `https://open.er-api.com/v6/latest/{BASE}` (frequent updates, no API key)
+- Currency names: `https://api.frankfurter.app/currencies`
+
 ## Tech
 
 - HTML / CSS / Vanilla JavaScript
-- API: `https://api.frankfurter.app`
