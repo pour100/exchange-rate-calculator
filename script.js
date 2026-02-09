@@ -42,6 +42,8 @@ let inFlightRatesController = null;
 const trendCache = new Map(); // key -> { points, startYmd, endYmd, lastDateYmd }
 let inFlightTrendController = null;
 
+let lastRefreshAt = null; // "when the UI was refreshed" (KST display), not the provider timestamp
+
 let audio = null;
 let bgmAutoplayAttempted = false;
 
@@ -232,7 +234,7 @@ async function ensureRate(base, quote, forceRefresh = false) {
   return { rate, lastUpdateUtc: entry.lastUpdateUtc };
 }
 
-async function convertCurrency(forceRefreshRate = false) {
+async function convertCurrency(forceRefreshRate = false, touchUpdateTime = true) {
   const { from, to } = getSelectedCodes();
 
   if (!from || !to) {
@@ -250,12 +252,16 @@ async function convertCurrency(forceRefreshRate = false) {
   setStatus(t("loadingLive"));
   setResult("…", "…");
 
-  const { rate, lastUpdateUtc } = await ensureRate(from, to, forceRefreshRate);
-  const updated = lastUpdateUtc ? parseUpdateUtc(lastUpdateUtc) : null;
-  const updatedKst = updated ? formatSeoulDateTime(updated) : null;
+  const { rate } = await ensureRate(from, to, forceRefreshRate);
 
-  setResult(`${formatInt(rate)} ${to}`, `1 ${from} = ${formatInt(rate)} ${to}${updatedKst ? ` | ${t("updated")}: ${updatedKst}` : ""}`);
-  setStatus(updatedKst ? `${t("updated")}: ${updatedKst}` : t("liveLoaded"));
+  // Show the real "refreshed" time in Korea time (users expect this to match current time).
+  const now = new Date();
+  const shownAt = touchUpdateTime ? now : (lastRefreshAt || now);
+  if (touchUpdateTime) lastRefreshAt = shownAt;
+  const updatedKst = formatSeoulDateTime(shownAt);
+
+  setResult(`${formatInt(rate)} ${to}`, `1 ${from} = ${formatInt(rate)} ${to} | ${t("updated")}: ${updatedKst}`);
+  setStatus(`${t("updated")}: ${updatedKst}`);
 }
 
 function downsample(points, maxPoints) {
@@ -309,15 +315,21 @@ async function fetchTrendSeries(base, quote, range) {
   }
 
   // Ensure series reaches "today" with latest live rate (even if ECB series lags).
+  // Also overwrite today's point if it exists so the chart matches the refreshed live rate.
   try {
-    const { rate, lastUpdateUtc } = await ensureRate(base, quote, false);
-    const lastDateYmd = points.length ? points[points.length - 1].date : null;
-    if (lastDateYmd !== endYmd) {
+    const { rate } = await ensureRate(base, quote, false);
+    const refreshedAtIso = (lastRefreshAt || new Date()).toISOString();
+    const last = points.length ? points[points.length - 1] : null;
+    if (last && last.date === endYmd) {
+      last.y = rate;
+      last.x = Date.parse(endYmd);
+      last.refreshedAtIso = refreshedAtIso;
+    } else {
       points.push({
         x: Date.parse(endYmd),
         y: rate,
         date: endYmd,
-        liveUpdatedUtc: lastUpdateUtc || null
+        refreshedAtIso
       });
     }
   } catch {
@@ -568,9 +580,9 @@ function renderTooltipForSelection() {
   const to = chartState.to || toSelect.value;
 
   let extra = "";
-  if (p.liveUpdatedUtc) {
-    const d = parseUpdateUtc(p.liveUpdatedUtc);
-    if (d) extra = `<div>${t("updated")}: ${formatSeoulDateTime(d)}</div>`;
+  if (p.refreshedAtIso) {
+    const d = new Date(p.refreshedAtIso);
+    if (!Number.isNaN(d.getTime())) extra = `<div>${t("updated")}: ${formatSeoulDateTime(d)}</div>`;
   }
 
   trendTooltip.innerHTML = `<div><b>${p.date}</b></div><div>1 ${from} = ${formatInt(p.y)} ${to}</div>${extra}`;
@@ -587,7 +599,7 @@ function renderTooltipForSelection() {
   trendTooltip.style.left = `${left}px`;
   trendTooltip.style.top = `${pad}px`;
 
-  const extraText = p.liveUpdatedUtc ? ` | ${t("updated")}: ${formatSeoulDateTime(parseUpdateUtc(p.liveUpdatedUtc) || new Date())}` : "";
+  const extraText = p.refreshedAtIso ? ` | ${t("updated")}: ${formatSeoulDateTime(new Date(p.refreshedAtIso))}` : "";
   trendReadout.textContent = `${t("selected")}: ${p.date} | 1 ${from} = ${formatInt(p.y)} ${to}${extraText}`;
 }
 
@@ -649,9 +661,9 @@ async function updateTrend(force = false) {
     }
 
     let extra = "";
-    if (last.liveUpdatedUtc) {
-      const d = parseUpdateUtc(last.liveUpdatedUtc);
-      if (d) extra = ` | ${t("updated")}: ${formatSeoulDateTime(d)}`;
+    if (last.refreshedAtIso) {
+      const d = new Date(last.refreshedAtIso);
+      if (!Number.isNaN(d.getTime())) extra = ` | ${t("updated")}: ${formatSeoulDateTime(d)}`;
     }
     setTrendReadout(`Last: ${last.date} | 1 ${from} = ${formatInt(last.y)} ${to}${extra}`);
   } catch {
@@ -689,7 +701,7 @@ function applyLang(next) {
 
   // Refresh already-fetched UI strings (status/result/trend) to match the new language.
   if (fromSelect.value && toSelect.value) {
-    void convertCurrency(false);
+    void convertCurrency(false, false);
     void updateTrend(false);
   }
 }
@@ -752,21 +764,22 @@ function toggleMusic() {
 function wireEvents() {
   form.addEventListener("submit", (ev) => ev.preventDefault());
 
-  refreshButton.addEventListener("click", () => {
-    void convertCurrency(true);
-    void updateTrend(true);
+  refreshButton.addEventListener("click", async () => {
+    hideTrendTooltip();
+    await convertCurrency(true, true);
+    await updateTrend(true);
   });
 
-  fromSelect.addEventListener("change", () => {
+  fromSelect.addEventListener("change", async () => {
     hideTrendTooltip();
-    void convertCurrency(false);
-    void updateTrend(false);
+    await convertCurrency(false, true);
+    await updateTrend(false);
   });
 
-  toSelect.addEventListener("change", () => {
+  toSelect.addEventListener("change", async () => {
     hideTrendTooltip();
-    void convertCurrency(false);
-    void updateTrend(false);
+    await convertCurrency(false, true);
+    await updateTrend(false);
   });
 
   for (const b of langButtons) {
