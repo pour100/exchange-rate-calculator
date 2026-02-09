@@ -21,6 +21,7 @@
   --chart-fill-top: rgba(46, 67, 255, 0.22);
   --chart-fill-bottom: rgba(0, 194, 168, 0.04);
   --chart-red: rgba(255, 58, 58, 0.92);
+  --chart-label-stroke: rgba(255, 255, 255, 0.82);
 }
 
 * {
@@ -45,6 +46,7 @@ html[data-theme="dark"] {
   --chart-fill-top: rgba(46, 67, 255, 0.38);
   --chart-fill-bottom: rgba(0, 194, 168, 0.10);
   --chart-red: rgba(255, 90, 90, 0.92);
+  --chart-label-stroke: rgba(0, 0, 0, 0.55);
 }
 
 body {
@@ -501,8 +503,9 @@ html[data-theme="dark"] .trend-tooltip {
 }
 
 @media (max-width: 680px) {
+  /* Keep From/To in 2 columns on most phones to save vertical space. */
   .grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .tabs {
@@ -523,9 +526,20 @@ html[data-theme="dark"] .trend-tooltip {
     flex-direction: column;
   }
 
+  .header {
+    gap: 0.45rem;
+  }
+
+  .status {
+    margin-top: 0;
+    font-size: 0.84rem;
+    padding: 0.45rem 0.6rem;
+  }
+
   .trend {
     margin-top: 0;
     padding-top: 0.65rem;
+    border-top: 0;
   }
 
   .controls {
@@ -545,17 +559,17 @@ html[data-theme="dark"] .trend-tooltip {
   .split {
     flex: 1;
     min-height: 0;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.75rem;
     padding-top: 0.7rem;
   }
 
   .pane {
-    flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .pane-top {
@@ -587,10 +601,22 @@ html[data-theme="dark"] .trend-tooltip {
 
   .trend-top {
     gap: 0.6rem;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .trend-subtitle {
     font-size: 0.86rem;
+  }
+
+  .tabs {
+    padding: 0.28rem;
+    gap: 0.25rem;
+  }
+
+  .tab {
+    font-size: 0.8rem;
+    padding: 0.38rem 0;
   }
 
   .chart-wrap {
@@ -603,5 +629,25 @@ html[data-theme="dark"] .trend-tooltip {
   .trend-readout {
     margin-top: 0.45rem;
     font-size: 0.88rem;
+  }
+
+  /* Tighten form controls for mobile */
+  .field span {
+    font-size: 0.8rem;
+  }
+
+  select {
+    padding: 0.58rem 0.65rem;
+    font-size: 0.92rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rate-row {
+    grid-template-columns: 1fr;
   }
 }

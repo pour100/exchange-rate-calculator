@@ -402,6 +402,7 @@ function drawLineChart(canvas, points, opts) {
   const cs = getComputedStyle(document.documentElement);
   const gridColor = (cs.getPropertyValue("--chart-grid") || "rgba(223,231,227,0.95)").trim();
   const labelColor = (cs.getPropertyValue("--chart-label") || "rgba(84,96,92,0.92)").trim();
+  const labelStroke = (cs.getPropertyValue("--chart-label-stroke") || "rgba(255,255,255,0.82)").trim();
   const lineColor = (cs.getPropertyValue("--chart-line") || "rgba(13,20,18,0.9)").trim();
   const fillTop = (cs.getPropertyValue("--chart-fill-top") || "rgba(46,67,255,0.22)").trim();
   const fillBottom = (cs.getPropertyValue("--chart-fill-bottom") || "rgba(0,194,168,0.04)").trim();
@@ -463,19 +464,26 @@ function drawLineChart(canvas, points, opts) {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = labelColor;
+  ctx.strokeStyle = labelStroke;
   ctx.font = (w < 360 ? "10px Space Grotesk, sans-serif" : "11px Space Grotesk, sans-serif");
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = 6;
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
   for (const tick of ticks) {
     const x = Math.round(xScale(tick.x)) + 0.5;
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
+    ctx.strokeStyle = gridColor;
     ctx.stroke();
+
+    // Outline + fill for crisp readability on bright/dark.
+    ctx.strokeStyle = labelStroke;
+    ctx.lineWidth = 3;
+    ctx.strokeText(tick.label, x, bottom + 6);
+    ctx.fillStyle = labelColor;
     ctx.fillText(tick.label, x, bottom + 6);
+    ctx.lineWidth = 1;
   }
-  ctx.restore();
 
   // Area fill
   const grad = ctx.createLinearGradient(0, top, 0, bottom);
@@ -494,7 +502,7 @@ function drawLineChart(canvas, points, opts) {
   ctx.beginPath();
   smoothPathTo(ctx, scaled);
   ctx.strokeStyle = lineColor;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = (w < 360 ? 1.6 : 2);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.stroke();
